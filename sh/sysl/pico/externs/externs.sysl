@@ -1,0 +1,185 @@
+// The pico-sdk's own surface, declared verbatim.
+//
+// **Nothing here is meant to be called by a program.** Every name, every type and every convention is
+// C's: an error is a non-zero `int`, a byte is an `int` so that `-1` can mean failure, and a pin is a
+// bare number. The module beside this one turns those into sysl and is what an application imports.
+//
+// The split is worth the file because it keeps two jobs apart. This one has to be *faithful* — a
+// signature that disagrees with the C header links perfectly and corrupts the call at run time, and
+// nothing in this arrangement checks one against the other, so each declaration below was read out of
+// the header named above it rather than remembered. The other one has to be *pleasant*, which is a
+// different question and would otherwise be answered in the same breath.
+//
+// It also means both modules may use a name: `sleep_ms` here is C's, and `sleep_ms` next door is
+// sysl's, and neither has to be renamed to avoid the other.
+
+module sh.sysl.pico.externs
+
+// ## `pico/stdio.h`
+
+// Brings up whichever stdio the CMake build selected — `pico_enable_stdio_usb` for the USB serial
+// port, `pico_enable_stdio_uart` for the pins.
+extern "stdio_init_all" stdio_init_all() -> bool
+
+// One byte of input, blocking until there is one. **`PICO_ERROR_TIMEOUT` (-1) on failure**, which is
+// why the answer is an `int` and not a byte.
+extern "stdio_getchar" stdio_getchar() -> int
+
+// ## `pico/stdio_usb.h`
+
+// Whether a host has opened the USB serial port. The SDK discards stdio output while this is false.
+extern "stdio_usb_connected" stdio_usb_connected() -> bool
+
+// ## `pico/time.h`
+
+extern "sleep_ms" sleep_ms(ms: u32)
+
+extern "sleep_us" sleep_us(us: u64)
+
+// ## `pico/cyw43_arch.h`
+
+// **Non-zero on failure**, C-style, rather than truthy on success.
+extern "cyw43_arch_init" cyw43_arch_init() -> int
+
+extern "cyw43_arch_deinit" cyw43_arch_deinit()
+
+// A GPIO belonging to the CYW43439 rather than to the RP2350, so `gpio_put` cannot reach it.
+extern "cyw43_arch_gpio_put" cyw43_arch_gpio_put(wl_gpio: uint, on: bool)
+
+extern "cyw43_arch_gpio_get" cyw43_arch_gpio_get(wl_gpio: uint) -> bool
+
+// ### Station mode
+//
+// **These need `pico_cyw43_arch_lwip_*` on the link line, not `pico_cyw43_arch_none`.** The join
+// below waits for `CYW43_LINK_UP`, which `cyw43_tcpip_link_status` reads out of an lwIP `netif` —
+// so with no TCP/IP stack linked there is nothing that can report the link ever coming up. The
+// module beside this one says which variant and why.
+
+extern "cyw43_arch_enable_sta_mode" cyw43_arch_enable_sta_mode()
+
+extern "cyw43_arch_disable_sta_mode" cyw43_arch_disable_sta_mode()
+
+// **Zero on success, and otherwise one of the `CYW43_LINK_*` negatives** — `-1` failed, `-2` no
+// such network, `-3` bad authentication — or `PICO_ERROR_TIMEOUT` (`-1`) when the timeout expires
+// first. That the two share `-1` is C's, and is undone next door.
+//
+// `pw` may be null for an open network, which is `none` on the sysl side.
+extern "cyw43_arch_wifi_connect_timeout_ms" cyw43_arch_wifi_connect_timeout_ms(
+    ssid: *u8, pw: *u8, auth: u32, timeout_ms: u32) -> int
+
+// Starts the join and returns immediately. **Zero means the request was sent**, not that the
+// network was joined.
+extern "cyw43_arch_wifi_connect_async" cyw43_arch_wifi_connect_async(
+    ssid: *u8, pw: *u8, auth: u32) -> int
+
+// ### Access-point mode
+
+extern "cyw43_arch_enable_ap_mode" cyw43_arch_enable_ap_mode(ssid: *u8, pw: *u8, auth: u32)
+
+extern "cyw43_arch_disable_ap_mode" cyw43_arch_disable_ap_mode()
+
+// ### The rest
+//
+// The country the radio is configured for, as `CYW43_COUNTRY(a, b, rev)` packed it: two ASCII
+// letters in the low bytes and a revision above them.
+extern "cyw43_arch_get_country_code" cyw43_arch_get_country_code() -> u32
+
+// Gives the driver a chance to run. **Required only by `pico_cyw43_arch_lwip_poll`**, where
+// nothing else will; under `..._threadsafe_background` it is a no-op, which is what makes it safe
+// to call unconditionally.
+extern "cyw43_arch_poll" cyw43_arch_poll()
+
+// ## `scan.c`, beside this package
+//
+// **The only names here that are not the SDK's.** Scanning needs the address of a driver global, an
+// options struct whose size only the header knows, and a callback handed a struct with a layout a
+// compiler chose — so it is done in C and read back a field at a time. `scan.c` says why at length,
+// including why the callback is not written in sysl even though it could be.
+
+extern "sysl_wifi_scan_start" scan_start() -> int
+
+extern "sysl_wifi_scan_busy" scan_busy() -> bool
+
+extern "sysl_wifi_scan_count" scan_count() -> int
+
+extern "sysl_wifi_scan_overflowed" scan_overflowed() -> bool
+
+// NUL-terminated, and valid until the next `scan_start`.
+extern "sysl_wifi_scan_ssid" scan_ssid(i: int) -> *u8
+
+extern "sysl_wifi_scan_rssi" scan_rssi(i: int) -> int
+
+extern "sysl_wifi_scan_channel" scan_channel(i: int) -> int
+
+extern "sysl_wifi_scan_auth" scan_auth(i: int) -> int
+
+// ## `net.c`, beside this package
+//
+// **Also not the SDK's.** An address lives in a `struct netif` that is a field of a driver global,
+// and lwIP reads it out with macros rather than functions — so there is nothing here that sysl could
+// declare directly, and `net.c` flattens all of it into numbers.
+
+// `CYW43_LINK_*`: `0` down, `1` associated, `2` associated with no address, `3` up, and negatives for
+// the failures. **`0` is also what a build with no TCP/IP stack answers**, since there is no
+// interface for it to read.
+extern "sysl_wifi_link_status" link_status() -> int
+
+// The four octets packed high to low — `a.b.c.d` as `0xAABBCCDD`, whatever this machine's byte order
+// is. **Zero means the interface has no address**, which is what an unconfigured one reads as.
+extern "sysl_wifi_ip4_address" ip4_address() -> u32
+
+extern "sysl_wifi_ip4_netmask" ip4_netmask() -> u32
+
+extern "sysl_wifi_ip4_gateway" ip4_gateway() -> u32
+
+// ## `dns.c`, beside this package
+//
+// **Also not the SDK's.** lwIP will only resolve a name through a callback that runs in its own
+// context, so `dns.c` holds the answer and this is the start-poll-read shape the scan already uses.
+// Only one address per name is on offer, and `dns.c` says why.
+
+// **Zero means the answer is already here**, `1` that a query went out, and a negative is lwIP's
+// `err_t` refusing to start.
+extern "sysl_dns_start" dns_start(name: *u8) -> int
+
+extern "sysl_dns_busy" dns_busy() -> bool
+
+extern "sysl_dns_found" dns_found() -> bool
+
+// Packed exactly as the three above are, and meaningless unless `dns_found` is true.
+extern "sysl_dns_address" dns_address() -> u32
+
+// ## `http.c`, beside this package
+//
+// **Also not the SDK's.** lwIP's HTTP client reports a body through a callback handed a `pbuf` chain
+// that has to be walked and released in lwIP's own context, and the TLS side needs three things
+// neither library supplies — `psa_crypto_init`, a millisecond clock, and the server name for SNI.
+// `http.c` says why at length.
+
+// **Zero means the request started.** A negative is lwIP's `err_t`, or `-100` a request already in
+// flight, `-101` the crypto library would not start, `-102` the built-in certificates would not
+// parse, `-103` a build with no HTTP client in it.
+extern "sysl_http_start" http_start(host: *u8, port: u16, uri: *u8, secure: bool) -> int
+
+extern "sysl_http_busy" http_busy() -> bool
+
+// `httpc_result_t`: `0` succeeded, `2` could not connect, `3` could not resolve, `4` the server hung
+// up, `5` timed out, `6` the server refused, `7` out of memory, `9` the length did not match.
+extern "sysl_http_outcome" http_outcome() -> int
+
+extern "sysl_http_status" http_status() -> u32
+
+extern "sysl_http_body_len" http_body_len() -> u32
+
+extern "sysl_http_truncated" http_truncated() -> bool
+
+// NUL-terminated, and valid until the next `http_start`.
+extern "sysl_http_body" http_body() -> *u8
+
+// ## C, through newlib
+//
+// The standard module binds this too, for `print`, but keeps it `private[sysl]` — and
+// `sysl/sys/platform.sysl` says why: the link names stay free so that a program can declare them
+// itself. This is a program doing exactly that, because echoing input works a character at a time and
+// going through `prints` would build a string per keystroke.
+extern "putchar" putchar(c: int) -> int

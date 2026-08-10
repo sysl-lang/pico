@@ -1,0 +1,57 @@
+// The Raspberry Pi Pico W — the **original** board, an RP2040 — reached through the C SDK.
+//
+// **`sh.sysl.pico2` is this same package for the newer board.** They are near-identical, because
+// what they declare is the SDK's surface rather than the chip's: pico-sdk covers both parts with one
+// API and the CYW43 wireless chip is the same silicon on both. Anything learned about one applies to
+// the other, with one exception, and the exception is the reason this is a separate package rather
+// than a version of that one.
+//
+// **The exception is `atomic.c`.** The RP2040's Cortex-M0+ is Armv6-M and has no `ldrex`/`strex`, so
+// LLVM cannot lower an `atomicrmw` inline and emits a call instead. That file supplies the calls,
+// over one of the chip's hardware spinlocks, and it says at length why disabling interrupts is the
+// wrong implementation on a dual-core part. `sh.sysl.pico2` needs none of it because the M33 has the
+// instructions.
+//
+// There is no `dependencies` block because this depends on nothing that resolves: what it needs is
+// the pico-sdk, and the pico-sdk is not a sysl package and could not be one. It is a CMake build
+// system that generates a second-stage bootloader, selects a board header and drives the final link
+// with its own linker script — none of which fits inside a thing `sysl build` fetches and compiles.
+//
+// So the arrangement is the other way up. **The SDK's CMake owns the link, and a program using this
+// package is built with `sysl build-c` into an archive that CMake then links.**
+//
+// This is the block a *consumer* writes to reach this package:
+//
+//     dependencies {
+//       pico { git = "github.com/sysl-lang/pico", version = "0.1.0" }
+//     }
+//
+// The coordinate is identity rather than a URL, so it carries no `https://`, and the version is the
+// tag `v0.1.0` on this repository. The coordinate names the *package*, `pico`, while the module a
+// program imports is `sh.sysl.pico`; `packages.md § 9` keeps those two deliberately apart.
+
+package {
+  name    = "pico"
+  version = "0.1.0"
+}
+
+// **`alloc = true`**, for the reason `sh.sysl.pico2` gives: the line editor a program here reaches
+// through `sysl.term.edit` allocates, and the SDK links newlib, so this board has a heap whether or
+// not this package touches one. Refusing to use it buys an API every caller has to work around.
+//
+// **No operating system, though, and there should never be one here.**
+requires {
+  alloc = true
+}
+
+// **It carries no `@link` directive**, and the reason differs from every other package in the org.
+// termbox2 has none because its implementation is vendored and compiled here; qcbor names `m`
+// because it reaches `pow`. This one has none because the symbols arrive from a link line that CMake
+// writes and sysl never sees. The absence looks the same and means something else.
+
+// ## The target to build for
+//
+// `sysl build-c --target thumbv6m-freestanding`, which is Armv6-M and is **not** either of the
+// targets a Pico 2 uses. Building this board's program for `thumb-freestanding-softfp` produces
+// Armv8-M instructions the M0+ cannot execute, and the failure is a fault at whatever ran first
+// rather than a refusal at the link.
