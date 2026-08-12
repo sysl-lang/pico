@@ -35,13 +35,13 @@ package {
   version = "0.1.0"
 }
 
-// **`alloc = true`**, for the reason `sh.sysl.pico2` gives: the line editor a program here reaches
+// **`heap = true`**, for the reason `sh.sysl.pico2` gives: the line editor a program here reaches
 // through `sysl.term.edit` allocates, and the SDK links newlib, so this board has a heap whether or
 // not this package touches one. Refusing to use it buys an API every caller has to work around.
 //
 // **No operating system, though, and there should never be one here.**
 requires {
-  alloc = true
+  heap = true
 }
 
 // **It carries no `@link` directive**, and the reason differs from every other package in the org.
