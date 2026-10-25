@@ -30,7 +30,7 @@ That is a whole program. There is no C in it, and no C in the project that build
 
 ```hocon
 dependencies {
-  pico { git = "github.com/sysl-lang/pico", version = "0.1.0" }
+  pico { git = "github.com/sysl-lang/pico", version = "0.1.1" }
 }
 ```
 

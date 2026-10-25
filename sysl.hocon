@@ -23,16 +23,17 @@
 // This is the block a *consumer* writes to reach this package:
 //
 //     dependencies {
-//       pico { git = "github.com/sysl-lang/pico", version = "0.1.0" }
+//       pico { git = "github.com/sysl-lang/pico", version = "0.1.1" }
 //     }
 //
 // The coordinate is identity rather than a URL, so it carries no `https://`, and the version is the
-// tag `v0.1.0` on this repository. The coordinate names the *package*, `pico`, while the module a
+// tag `v0.1.1` on this repository. The coordinate names the *package*, `pico`, while the module a
 // program imports is `sh.sysl.pico`; `packages.md § 9` keeps those two deliberately apart.
 
 package {
   name    = "pico"
-  version = "0.1.0"
+  version = "0.1.1"
+  sysl    = "0.6.0"
 }
 
 // **`heap = true`**, for the reason `sh.sysl.pico2` gives: the line editor a program here reaches
